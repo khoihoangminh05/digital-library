@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BooksService } from '../books/books.service';
 import { StateGraph, Annotation, messagesStateReducer, START, END } from '@langchain/langgraph';
@@ -165,7 +165,12 @@ export class AgentService implements OnModuleInit {
     }
 
     // 2. Query books database via pgvector
-    const books = await this.booksService.semanticSearch(refinedQuery);
+    let books: any[] = [];
+    try {
+      books = await this.booksService.semanticSearch(refinedQuery);
+    } catch (e: any) {
+      this.logger.warn(`Librarian vector search failed: ${e.message}. Continuing without catalog context.`);
+    }
     this.logger.log(`Librarian database lookup found ${books.length} books.`);
 
     // 3. Format and answer
@@ -228,7 +233,12 @@ export class AgentService implements OnModuleInit {
     }
 
     // 2. Query books database
-    const books = await this.booksService.semanticSearch(refinedQuery);
+    let books: any[] = [];
+    try {
+      books = await this.booksService.semanticSearch(refinedQuery);
+    } catch (e: any) {
+      this.logger.warn(`Researcher vector search failed: ${e.message}. Continuing without catalog context.`);
+    }
     this.logger.log(`Researcher database lookup found ${books.length} books.`);
 
     // 3. Answer combining external knowledge + database summaries
@@ -286,8 +296,28 @@ export class AgentService implements OnModuleInit {
       };
     } catch (err: any) {
       this.logger.error(`Failed to execute LangGraph chat: ${err.message}`);
-      throw new InternalServerErrorException(`AI Agent chat execution failed: ${err.message}`);
+      // Degrade gracefully so the chat UI shows a friendly message instead of a 500
+      return {
+        response: this.friendlyAiError(err),
+        history,
+        nextAgent: 'end',
+      };
     }
+  }
+
+  /**
+   * Converts raw AI provider errors into user-friendly messages so the
+   * chat/tutor endpoints degrade gracefully instead of returning HTTP 500.
+   */
+  private friendlyAiError(err: any): string {
+    const msg = (err?.message || '').toString();
+    if (msg.includes('429') || /rate.?limit|quota|RESOURCE_EXHAUSTED/i.test(msg)) {
+      return 'The AI assistant is handling too many requests right now (rate limit reached). Please wait a minute and try again.';
+    }
+    if (msg.includes('401') || msg.includes('403') || /authentication|api key|unauthorized/i.test(msg)) {
+      return 'The AI assistant is currently unavailable due to a configuration issue (invalid API key). Please contact the administrator.';
+    }
+    return 'Sorry, the AI assistant is temporarily unavailable. Please try again later.';
   }
 
   // Mapping Helpers
@@ -387,7 +417,8 @@ export class AgentService implements OnModuleInit {
       return { response: responseText };
     } catch (err: any) {
       this.logger.error(`AI Tutor failed: ${err.message}`);
-      throw new InternalServerErrorException(`AI Tutor execution failed: ${err.message}`);
+      // Degrade gracefully so the reader UI shows a friendly message instead of a 500
+      return { response: this.friendlyAiError(err) };
     }
   }
 }

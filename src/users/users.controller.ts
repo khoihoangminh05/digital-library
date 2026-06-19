@@ -61,6 +61,36 @@ export class UsersController {
     return new UserEntity(user);
   }
 
+  @Patch(':id/status')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update status (Ban/Unban) of a user' })
+  @ApiParam({ name: 'id', description: 'The UUID of the user', type: String })
+  @ApiResponse({ status: 200, description: 'User status successfully updated.', type: UserEntity })
+  @ApiResponse({ status: 400, description: 'Bad request (validation failed).' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { status: string },
+  ): Promise<UserEntity> {
+    const user = await this.usersService.updateStatus(id, body.status);
+    return new UserEntity(user);
+  }
+
+  @Patch(':id/role')
+  @Roles(Role.ADMIN)
+  @ApiOperation({ summary: 'Update role of a user' })
+  @ApiParam({ name: 'id', description: 'The UUID of the user', type: String })
+  @ApiResponse({ status: 200, description: 'User role successfully updated.', type: UserEntity })
+  @ApiResponse({ status: 400, description: 'Bad request (validation failed).' })
+  @ApiResponse({ status: 404, description: 'User not found.' })
+  async updateRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { role: Role },
+  ): Promise<UserEntity> {
+    const user = await this.usersService.updateRole(id, body.role);
+    return new UserEntity(user);
+  }
+
   @Delete(':id')
   @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Delete a user by their ID' })

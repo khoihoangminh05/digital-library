@@ -5,3 +5,7 @@ node_modules
 /generated/prisma
 /dist
 
+# Logs and local test artifacts
+*.log
+test-*.ps1
+

@@ -22,6 +22,12 @@ export class UserEntity {
   role: Role;
 
   @ApiProperty({
+    description: 'The status of the user',
+    example: 'ACTIVE',
+  })
+  status: string;
+
+  @ApiProperty({
     description: 'The timestamp when the user was created',
     example: '2026-05-29T09:27:00.000Z',
   })

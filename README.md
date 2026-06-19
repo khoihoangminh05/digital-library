@@ -1,98 +1,291 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 📚 Digital Library — AI-Powered Digital Library System
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A full-stack digital library platform where users discover, borrow (request timed reading access), and read PDF publications, enhanced with an AI multi-agent assistant, semantic (vector) search, personalized recommendations, and a complete admin console.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> Graduation project. Backend: **NestJS** · Frontend: **Next.js 16** · DB: **PostgreSQL + pgvector** · Cache/Queue: **Redis + BullMQ** · Storage: **AWS S3** · AI: **Gemini / OpenAI + LangGraph**.
 
-## Description
+---
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## ✨ Features
 
-## Project setup
+### For readers
+- 🔎 **Catalog** with text search, category filters, **sorting** and **pagination**
+- 🧠 **AI semantic search** (cosine similarity over 1536-dim embeddings)
+- 📖 **Secure PDF reader** with real-time reading-progress sync (Socket.io)
+- 🤝 **Borrow workflow** — request → librarian approval → 14-day reading window → return
+- ⚠️ **Penalties** for late returns ($1/day), with borrowing blocked until settled
+- ❤️ **Favorites / wishlist**
+- ▶️ **Continue reading** (resume from your last page)
+- ✨ **Personalized recommendations** (vector similarity on your borrow history)
+- 🔔 **Notifications** (borrow approved/rejected, due-soon, overdue, penalty issued)
+- 💬 **Floating AI assistant** (multi-agent: Router → Librarian / Researcher)
+- 🎓 **AI Tutor** — explains highlighted passages while reading
+- 👤 **Profile** page with activity stats + password change
 
-```bash
-$ npm install
+### For admins
+- 📊 **Dashboard** with real statistics + charts (borrow trends, category split, top books)
+- 📕 **Book management** (CRUD + S3 cover/PDF upload, AI summary/tags auto-generated)
+- 👥 **User management** (roles, ban/unban)
+- 📋 **Borrow requests** queue (approve / reject / mark returned)
+- 💵 **Penalty management** (mark paid, totals)
+
+---
+
+## 🧱 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | NestJS 11, TypeScript, Prisma 7 |
+| Frontend | Next.js 16 (App Router), React, TailwindCSS, lucide-react |
+| Database | PostgreSQL 16 + `pgvector` |
+| Cache / Queue | Redis 7, BullMQ |
+| Storage | AWS S3 (covers + PDFs) |
+| AI | Google Gemini / OpenAI (embeddings + chat), LangChain + LangGraph |
+| Realtime | Socket.io |
+| Auth | JWT + Passport, RBAC (ADMIN/USER) |
+| Security | Rate limiting (`@nestjs/throttler`), env-based CORS, global exception filter |
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart LR
+  subgraph Client
+    FE["Next.js 16 Frontend<br/>(catalog, reader, admin, chat)"]
+  end
+
+  subgraph Server["NestJS Backend"]
+    API["REST API + Swagger"]
+    WS["Socket.io Gateway"]
+    Q["BullMQ Worker<br/>(PDF parse, summarize, embed)"]
+    AG["LangGraph Multi-Agent<br/>Router / Librarian / Researcher / Tutor"]
+    CRON["Cron<br/>(overdue scan, due-soon)"]
+  end
+
+  subgraph Data
+    PG[("PostgreSQL<br/>+ pgvector")]
+    RED[("Redis<br/>cache + queue")]
+    S3[("AWS S3<br/>covers + PDFs")]
+  end
+
+  AI["Gemini / OpenAI"]
+
+  FE -->|JWT REST| API
+  FE -->|progress| WS
+  API --> PG
+  API --> RED
+  API --> S3
+  API --> AG
+  AG --> AI
+  Q --> AI
+  Q --> PG
+  Q --> S3
+  CRON --> PG
 ```
 
-## Compile and run the project
+### Entity Relationship Diagram
 
-```bash
-# development
-$ npm run start
+```mermaid
+erDiagram
+  USER ||--o{ BORROW_SLIP : places
+  USER ||--o{ PENALTY_SLIP : owes
+  USER ||--o{ NOTIFICATION : receives
+  USER ||--o{ FAVORITE : saves
+  BOOK ||--o{ BORROW_SLIP : "is borrowed in"
+  BOOK ||--o{ FAVORITE : "is favorited in"
+  BORROW_SLIP ||--o| PENALTY_SLIP : "may incur"
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+  USER {
+    uuid id PK
+    string email UK
+    string password
+    enum role "ADMIN | USER"
+    string status "ACTIVE | BANNED"
+  }
+  BOOK {
+    uuid id PK
+    string title
+    string author
+    string category
+    vector embedding "1536-dim"
+    string[] tags
+    string[] keyConcepts
+  }
+  BORROW_SLIP {
+    uuid id PK
+    uuid userId FK
+    uuid bookId FK
+    datetime borrowDate
+    datetime dueDate
+    datetime returnDate
+    enum status "PENDING|BORROWED|RETURNED|OVERDUE|REJECTED"
+  }
+  PENALTY_SLIP {
+    uuid id PK
+    uuid borrowSlipId FK,UK
+    uuid userId FK
+    float fineAmount
+    int lateDays
+    enum status "UNPAID | PAID"
+  }
+  NOTIFICATION {
+    uuid id PK
+    uuid userId FK
+    enum type
+    string message
+    string link
+    boolean read
+  }
+  FAVORITE {
+    uuid id PK
+    uuid userId FK
+    uuid bookId FK
+  }
+  REVIEW {
+    uuid id PK
+    uuid bookId
+    uuid userId
+    int rating
+    string comment
+  }
+  READING_PROGRESS {
+    uuid id PK
+    uuid userId
+    uuid bookId
+    int currentPage
+  }
 ```
 
-## Run tests
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 20+
+- Docker + Docker Compose (for PostgreSQL & Redis)
+- An AWS S3 bucket (for file storage) and a Gemini **or** OpenAI API key (for AI features)
+
+### Option A — Local development
 
 ```bash
-# unit tests
-$ npm run test
+# 1. Clone & install backend deps
+npm install
 
-# e2e tests
-$ npm run test:e2e
+# 2. Configure environment
+cp .env.example .env          # then edit values (DB, JWT, AWS, AI key)
 
-# test coverage
-$ npm run test:cov
+# 3. Start PostgreSQL + Redis
+docker compose up -d db redis
+
+# 4. Sync database schema
+npx prisma db push
+
+# 5. Seed an admin + demo data (optional)
+npm run seed
+
+# 6. Run the backend (http://localhost:3002, Swagger at /api)
+npm run start:dev
 ```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# 7. Frontend (separate terminal)
+cd frontend
+npm install
+cp .env.example .env.local    # adjust NEXT_PUBLIC_API_URL if needed
+npm run dev                    # http://localhost:3000
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Option B — Full Docker stack
 
-## Resources
+```bash
+cp .env.example .env          # fill in AWS + AI credentials
+docker compose up --build     # db, redis, backend (:3002), frontend (:3000)
+```
 
-Check out a few resources that may come in handy when working with NestJS:
+> The backend container runs `prisma db push` automatically on start. Run `docker compose exec backend npm run seed` once to seed demo data.
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+### Default demo accounts (after `npm run seed`)
 
-## Support
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@lib.com` | `admin1234` |
+| User | `user@lib.com` | `user1234` |
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+---
 
-## Stay in touch
+## 🔐 Environment Variables
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+See [`.env.example`](./.env.example) for the full list. Key entries:
 
-## License
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` / `JWT_EXPIRES_IN` | Auth token config |
+| `CORS_ORIGINS` | Comma-separated allowed frontend origins (empty = allow all in dev) |
+| `THROTTLE_TTL` / `THROTTLE_LIMIT` | Rate-limit window (s) and max requests |
+| `AWS_*` | S3 credentials + bucket |
+| `REDIS_HOST` / `REDIS_PORT` | Redis connection |
+| `GEMINI_API_KEY` *or* `OPENAI_API_KEY` | AI provider key |
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+> ⚠️ Never commit `.env`. It is git-ignored. Rotate any credentials that were ever shared.
+
+---
+
+## 🧪 Testing
+
+```bash
+npm test            # unit tests (auth, borrow/penalty logic)
+npm run test:cov    # with coverage
+```
+
+---
+
+## 📂 Project Structure
+
+```
+digital-library/
+├── src/
+│   ├── auth/            # JWT auth, login/register, change-password, profile
+│   ├── users/           # user CRUD + roles + ban
+│   ├── books/           # catalog, search, reader progress, reviews, recommendations
+│   ├── borrow-slips/    # borrow workflow + penalties + cron
+│   ├── notifications/   # in-app notifications
+│   ├── favorites/       # wishlist
+│   ├── ai/              # embeddings + provider client
+│   ├── agent/           # LangGraph multi-agent assistant + tutor
+│   ├── stats/           # admin dashboard analytics
+│   ├── s3/              # AWS S3 helpers
+│   ├── common/filters/  # global exception filter
+│   └── prisma/          # Prisma service
+├── prisma/
+│   ├── schema.prisma
+│   └── seed.ts
+├── frontend/            # Next.js 16 app
+├── Dockerfile           # backend image
+├── docker-compose.yml   # db + redis + backend + frontend
+└── .env.example
+```
+
+---
+
+## 📡 API Overview
+
+Full interactive docs at **`http://localhost:3002/api`** (Swagger). Highlights:
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/change-password` |
+| Books | `GET /books` (search/sort/paginate), `GET /books/semantic-search`, `GET /books/recommendations`, `GET /books/reading/history` |
+| Borrowing | `POST /borrow-slips`, `GET /borrow-slips/my`, `PATCH /borrow-slips/:id/approve|reject|return` |
+| Penalties | `GET /borrow-slips/penalties`, `PATCH /borrow-slips/penalties/:id/pay` |
+| Favorites | `GET /favorites`, `POST|DELETE /favorites/:bookId` |
+| Notifications | `GET /notifications`, `GET /notifications/unread-count`, `PATCH /notifications/read-all` |
+| AI | `POST /ai/chat`, `POST /ai/tutor` |
+| Admin | `GET /admin/stats`, `GET /users`, `GET /borrow-slips` |
+
+---
+
+## 📝 Notes
+- Digital books are always readable online; "borrowing" models a timed reading-access request with librarian approval and late-return penalties (no physical stock).
+- AI features degrade gracefully: if the provider rate-limits or a key is missing, the chat/tutor return a friendly message instead of failing.

@@ -82,7 +82,16 @@ export class BooksService {
     return book;
   }
 
-  async findAll(search?: string, category?: string) {
+  async findAll(opts: {
+    search?: string;
+    category?: string;
+    sortBy?: string;
+    order?: string;
+    page?: number;
+    limit?: number;
+    paginated?: boolean;
+  } = {}) {
+    const { search, category, paginated } = opts;
     const where: any = {};
 
     if (category && category !== 'All') {
@@ -109,39 +118,66 @@ export class BooksService {
       ];
     }
 
-    const books = await this.prisma.book.findMany({
-      where,
-      select: {
-        id: true,
-        title: true,
-        author: true,
-        description: true,
-        coverUrl: true,
-        fileUrl: true,
-        category: true,
-        tags: true,
-        keyConcepts: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+    // Whitelist sortable columns to avoid invalid Prisma ordering
+    const allowedSort = ['createdAt', 'title', 'author'];
+    const sortBy = allowedSort.includes(opts.sortBy || '') ? (opts.sortBy as string) : 'createdAt';
+    const order = opts.order === 'asc' ? 'asc' : 'desc';
+    const orderBy = { [sortBy]: order };
 
-    return Promise.all(
-      books.map(async (book) => {
-        let presignedCover: string | null = null;
-        if (book.coverUrl) {
-          try {
-            presignedCover = await this.s3Service.getPresignedDownloadUrl(book.coverUrl, 3600);
-          } catch (error: any) {
-            console.error(`Failed to generate pre-signed URL for cover: ${error.message}`);
+    const select = {
+      id: true,
+      title: true,
+      author: true,
+      description: true,
+      coverUrl: true,
+      fileUrl: true,
+      category: true,
+      tags: true,
+      keyConcepts: true,
+      createdAt: true,
+      updatedAt: true,
+    };
+
+    const resolveCovers = async (books: any[]) =>
+      Promise.all(
+        books.map(async (book) => {
+          let presignedCover: string | null = null;
+          if (book.coverUrl) {
+            try {
+              presignedCover = await this.s3Service.getPresignedDownloadUrl(book.coverUrl, 3600);
+            } catch (error: any) {
+              console.error(`Failed to generate pre-signed URL for cover: ${error.message}`);
+            }
           }
-        }
-        return {
-          ...book,
-          coverUrl: presignedCover || book.coverUrl,
-        };
-      }),
-    );
+          return { ...book, coverUrl: presignedCover || book.coverUrl };
+        }),
+      );
+
+    if (paginated) {
+      const page = Math.max(1, opts.page || 1);
+      const limit = Math.min(60, Math.max(1, opts.limit || 9));
+      const [total, books] = await Promise.all([
+        this.prisma.book.count({ where }),
+        this.prisma.book.findMany({
+          where,
+          select,
+          orderBy,
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+      ]);
+      const items = await resolveCovers(books);
+      return {
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      };
+    }
+
+    const books = await this.prisma.book.findMany({ where, select, orderBy });
+    return resolveCovers(books);
   }
 
   async findOne(id: string) {
@@ -401,6 +437,76 @@ export class BooksService {
   }
 
   /**
+   * Generates personalized book recommendations for a user based on their
+   * borrowing history, using the embedding of their most recently borrowed
+   * book as the query vector (pgvector cosine similarity). Already-borrowed
+   * books are excluded from the results.
+   */
+  async getRecommendations(userId: string) {
+    // 1. Collect the user's borrowed book ids (most recent first)
+    const slips = await this.prisma.borrowSlip.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: { bookId: true },
+    });
+    const borrowedIds = [...new Set(slips.map((s) => s.bookId))];
+    if (borrowedIds.length === 0) {
+      return [];
+    }
+
+    // 2. Find the embedding of the most recently borrowed book that has one
+    const seed: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT id, embedding::text AS embedding
+       FROM "books"
+       WHERE id = ANY($1::uuid[]) AND embedding IS NOT NULL
+       ORDER BY array_position($1::uuid[], id) ASC
+       LIMIT 1`,
+      borrowedIds,
+    );
+    if (!seed.length || !seed[0].embedding) {
+      return [];
+    }
+    const vectorStr = seed[0].embedding as string;
+
+    // 3. Find similar books excluding the ones already borrowed
+    const rawResults: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT id, title, author, description, "coverUrl", "fileUrl", category, tags, "keyConcepts", "createdAt", "updatedAt",
+              (1 - (embedding <=> $1::vector)) as similarity
+       FROM "books"
+       WHERE embedding IS NOT NULL AND id <> ALL($2::uuid[])
+       ORDER BY embedding <=> $1::vector ASC
+       LIMIT 6`,
+      vectorStr,
+      borrowedIds,
+    );
+
+    // 4. Resolve pre-signed cover URLs
+    return Promise.all(
+      rawResults.map(async (book) => {
+        let presignedCover: string | null = null;
+        if (book.coverUrl) {
+          try {
+            presignedCover = await this.s3Service.getPresignedDownloadUrl(book.coverUrl, 3600);
+          } catch (error: any) {
+            console.error(`Failed to generate pre-signed URL for recommendation cover: ${error.message}`);
+          }
+        }
+        return {
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          description: book.description,
+          coverUrl: presignedCover || book.coverUrl,
+          category: book.category,
+          tags: book.tags || [],
+          keyConcepts: book.keyConcepts || [],
+          similarity: Number(book.similarity || 0),
+        };
+      }),
+    );
+  }
+
+  /**
    * Fetches the user's progress for a specific book.
    * Checks Redis first for real-time changes, falling back to PostgreSQL.
    */
@@ -429,6 +535,57 @@ export class BooksService {
     });
 
     return { currentPage: progress ? progress.currentPage : 1 };
+  }
+
+  /**
+   * Returns the user's reading history (books they have progress on),
+   * ordered by most recently read, with resolved cover URLs. Powers the
+   * "Continue Reading" experience.
+   */
+  async getReadingHistory(userId: string) {
+    const progresses = await this.prisma.readingProgress.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: 12,
+    });
+
+    if (progresses.length === 0) {
+      return [];
+    }
+
+    const bookIds = progresses.map((p) => p.bookId);
+    const books = await this.prisma.book.findMany({
+      where: { id: { in: bookIds } },
+      select: {
+        id: true,
+        title: true,
+        author: true,
+        coverUrl: true,
+        category: true,
+      },
+    });
+    const bookMap = new Map(books.map((b) => [b.id, b]));
+
+    const results: any[] = [];
+    for (const progress of progresses) {
+      const book = bookMap.get(progress.bookId);
+      if (!book) continue;
+      let presignedCover: string | null = null;
+      if (book.coverUrl) {
+        try {
+          presignedCover = await this.s3Service.getPresignedDownloadUrl(book.coverUrl, 3600);
+        } catch (error: any) {
+          console.error(`Failed to generate pre-signed URL for reading history cover: ${error.message}`);
+        }
+      }
+      results.push({
+        ...book,
+        coverUrl: presignedCover || book.coverUrl,
+        currentPage: progress.currentPage,
+        lastReadAt: progress.updatedAt,
+      });
+    }
+    return results;
   }
 
   async addReview(bookId: string, userId: string, userEmail: string, rating: number, comment: string) {

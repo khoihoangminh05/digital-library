@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../context/AuthContext';
-import { Loader2, LayoutDashboard, BookOpen, PlusCircle, ArrowLeft, Shield } from 'lucide-react';
+import { Loader2, LayoutDashboard, BookOpen, PlusCircle, ArrowLeft, Shield, Users, ClipboardList, CircleDollarSign } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -53,6 +53,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { label: 'Overview', href: '/admin/dashboard', icon: LayoutDashboard },
     { label: 'Manage Books', href: '/admin/books', icon: BookOpen },
     { label: 'Add Publication', href: '/admin/books/add', icon: PlusCircle },
+    { label: 'Borrow Requests', href: '/admin/borrows', icon: ClipboardList },
+    { label: 'Penalties', href: '/admin/penalties', icon: CircleDollarSign },
+    { label: 'Users', href: '/admin/users', icon: Users },
   ];
 
   // Admin access: render console sidebar layout

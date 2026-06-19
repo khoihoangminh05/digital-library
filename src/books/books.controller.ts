@@ -44,13 +44,26 @@ export class BooksController {
   @Get()
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(60)
-  @ApiOperation({ summary: 'Retrieve all books with optional search and category filters' })
+  @ApiOperation({ summary: 'Retrieve books with optional search, category, sorting and pagination' })
   @ApiResponse({ status: 200, description: 'List of books retrieved successfully.' })
   findAll(
     @Query('search') search?: string,
     @Query('category') category?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('order') order?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('paginated') paginated?: string,
   ) {
-    return this.booksService.findAll(search, category);
+    return this.booksService.findAll({
+      search,
+      category,
+      sortBy,
+      order,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      paginated: paginated === 'true',
+    });
   }
 
   @Get('semantic-search')
@@ -64,6 +77,26 @@ export class BooksController {
       return [];
     }
     return this.booksService.semanticSearch(query);
+  }
+
+  @Get('recommendations')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get personalized book recommendations based on borrowing history' })
+  @ApiResponse({ status: 200, description: 'List of recommended books.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getRecommendations(@Request() req: any) {
+    return this.booksService.getRecommendations(req.user.id);
+  }
+
+  @Get('reading/history')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Get the user's reading history (continue reading)" })
+  @ApiResponse({ status: 200, description: 'Reading history returned successfully.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  getReadingHistory(@Request() req: any) {
+    return this.booksService.getReadingHistory(req.user.id);
   }
 
   @Get(':id')

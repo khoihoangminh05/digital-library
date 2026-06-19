@@ -14,15 +14,70 @@ enum Role {
   USER
 }
 
+enum BorrowStatus {
+  PENDING
+  BORROWED
+  RETURNED
+  OVERDUE
+  REJECTED
+}
+
+enum PenaltyStatus {
+  UNPAID
+  PAID
+}
+
+enum NotificationType {
+  BORROW_APPROVED
+  BORROW_REJECTED
+  DUE_SOON
+  OVERDUE
+  PENALTY_ISSUED
+  GENERAL
+}
+
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique
-  password  String
-  role      Role     @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String         @id @default(uuid()) @db.Uuid
+  email         String         @unique
+  password      String
+  role          Role           @default(USER)
+  status        String         @default("ACTIVE")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  borrowSlips   BorrowSlip[]
+  penaltySlips  PenaltySlip[]
+  notifications Notification[]
+  favorites     Favorite[]
 
   @@map("users")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType @default(GENERAL)
+  message   String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model Favorite {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  bookId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId])
+  @@map("favorites")
 }
 
 model Book {
@@ -38,6 +93,8 @@ model Book {
   updatedAt   DateTime               @updatedAt
   tags        String[]               @default([])
   keyConcepts String[]               @default([])
+  borrowSlips BorrowSlip[]
+  favorites   Favorite[]
 
   @@map("books")
 }
@@ -63,5 +120,39 @@ model Review {
   createdAt DateTime @default(now())
 
   @@map("reviews")
+}
+
+model BorrowSlip {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @db.Uuid
+  bookId      String       @db.Uuid
+  borrowDate  DateTime?
+  dueDate     DateTime?
+  returnDate  DateTime?
+  status      BorrowStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  book        Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  penaltySlip PenaltySlip?
+
+  @@map("borrow_slips")
+}
+
+model PenaltySlip {
+  id           String        @id @default(uuid()) @db.Uuid
+  borrowSlipId String        @unique @db.Uuid
+  userId       String        @db.Uuid
+  fineAmount   Float
+  lateDays     Int
+  status       PenaltyStatus @default(UNPAID)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  borrowSlip   BorrowSlip    @relation(fields: [borrowSlipId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("penalty_slips")
 }
 

@@ -53,6 +53,7 @@ export default function BookReaderPage() {
   
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [bookTitle, setBookTitle] = useState<string>('Publication Reader');
+  const [bookInsights, setBookInsights] = useState<{ description?: string; tags?: string[]; keyConcepts?: string[] }>({});
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState<number | null>(null);
@@ -74,7 +75,7 @@ export default function BookReaderPage() {
   const [tutorLoading, setTutorLoading] = useState<boolean>(false);
 
   // Book Reviews States
-  const [sidebarTab, setSidebarTab] = useState<'tutor' | 'reviews'>('tutor');
+  const [sidebarTab, setSidebarTab] = useState<'tutor' | 'reviews' | 'insights'>('tutor');
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewRating, setReviewRating] = useState<number>(5);
   const [reviewComment, setReviewComment] = useState<string>('');
@@ -142,9 +143,14 @@ export default function BookReaderPage() {
           }
         }
 
-        // Fetch metadata to show book title
+        // Fetch metadata to show book title and AI insights
         const metaRes = await api.get(`/books/${id}`);
         setBookTitle(metaRes.data.title);
+        setBookInsights({
+          description: metaRes.data.description,
+          tags: metaRes.data.tags,
+          keyConcepts: metaRes.data.keyConcepts,
+        });
 
         // Fetch initial reading progress
         try {
@@ -590,6 +596,16 @@ export default function BookReaderPage() {
                   >
                     Reviews
                   </button>
+                  <button
+                    onClick={() => setSidebarTab('insights')}
+                    className={`px-3 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                      sidebarTab === 'insights'
+                        ? 'bg-neutral-900 text-violet-300 border border-neutral-800'
+                        : 'text-neutral-500 hover:text-neutral-350'
+                    }`}
+                  >
+                    Insights
+                  </button>
                 </div>
                 <button 
                   onClick={() => setSidebarOpen(false)}
@@ -682,7 +698,7 @@ export default function BookReaderPage() {
                     </form>
                   </div>
                 </>
-              ) : (
+              ) : sidebarTab === 'reviews' ? (
                 <>
                   {/* Reviews Content */}
                   <div className="flex-grow p-4 overflow-y-auto space-y-5 scrollbar-thin scrollbar-thumb-neutral-900 flex flex-col">
@@ -792,6 +808,60 @@ export default function BookReaderPage() {
                         </button>
                       </div>
                     </form>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* AI Insights Content */}
+                  <div className="flex-grow p-5 overflow-y-auto space-y-6 scrollbar-thin scrollbar-thumb-neutral-900">
+                    {/* AI Summary */}
+                    <div>
+                      <div className="flex items-center space-x-2 mb-3">
+                        <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">AI Summary</h4>
+                      </div>
+                      <p className="text-[11px] text-neutral-400 leading-relaxed font-medium whitespace-pre-wrap">
+                        {bookInsights.description || 'No AI summary has been generated for this publication yet.'}
+                      </p>
+                    </div>
+
+                    {/* Key Concepts */}
+                    {bookInsights.keyConcepts && bookInsights.keyConcepts.length > 0 && (
+                      <div>
+                        <div className="flex items-center space-x-2 mb-3">
+                          <GraduationCap className="w-3.5 h-3.5 text-fuchsia-400" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">Key Concepts</h4>
+                        </div>
+                        <ul className="space-y-1.5">
+                          {bookInsights.keyConcepts.map((concept, i) => (
+                            <li key={i} className="flex items-start space-x-2 text-[11px] text-neutral-400 font-medium">
+                              <span className="text-violet-500 mt-0.5">•</span>
+                              <span>{concept}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Tags */}
+                    {bookInsights.tags && bookInsights.tags.length > 0 && (
+                      <div>
+                        <div className="flex items-center space-x-2 mb-3">
+                          <Star className="w-3.5 h-3.5 text-amber-400" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-neutral-300">Tags</h4>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {bookInsights.tags.map((tag, i) => (
+                            <span
+                              key={i}
+                              className="text-[10px] font-bold text-fuchsia-300 bg-fuchsia-500/5 border border-fuchsia-500/15 px-2.5 py-1 rounded-full"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </>
               )}

@@ -16,12 +16,24 @@ export class AuthService {
     return this.usersService.create(createUserDto);
   }
 
+  async getProfile(userId: string) {
+    return this.usersService.getProfileWithActivity(userId);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    return this.usersService.changePassword(userId, currentPassword, newPassword);
+  }
+
   async validateUser(loginDto: LoginDto): Promise<any> {
     const { email, password } = loginDto;
     const user = await this.usersService.findOneByEmailWithPassword(email);
 
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (user.status === 'BANNED') {
+      throw new UnauthorizedException('Your account has been banned');
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);

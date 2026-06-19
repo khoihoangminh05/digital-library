@@ -2,12 +2,17 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for frontend requests
-  app.enableCors();
+  // Restrict CORS to configured origins (comma-separated). Empty = allow all (dev only).
+  const corsOrigins = process.env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean);
+  app.enableCors({
+    origin: corsOrigins && corsOrigins.length > 0 ? corsOrigins : true,
+    credentials: true,
+  });
 
   // Enable validation globally
   app.useGlobalPipes(
@@ -17,6 +22,9 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
     }),
   );
+
+  // Consistent JSON error envelope for all unhandled exceptions
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   // Configure Swagger documentation
   const config = new DocumentBuilder()

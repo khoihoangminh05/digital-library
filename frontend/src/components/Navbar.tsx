@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { Library, LogIn, LogOut, User as UserIcon, BookOpen, Compass } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 export const Navbar: React.FC = () => {
   const { user, isAuthenticated, logout } = useAuth();
@@ -15,6 +16,10 @@ export const Navbar: React.FC = () => {
     { label: 'Explore Books', href: '/books' },
     { label: 'Library News', href: '/news' },
   ];
+
+  if (isAuthenticated) {
+    navItems.push({ label: 'My Library', href: '/my-borrows' });
+  }
 
   if (isAuthenticated && user?.role === 'ADMIN') {
     navItems.push({ label: 'Admin Console', href: '/admin/dashboard' });
@@ -62,7 +67,12 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center space-x-4">
             {isAuthenticated && user ? (
               <div className="flex items-center space-x-3 sm:space-x-4">
-                <div className="hidden sm:flex items-center space-x-2 bg-neutral-900/60 px-3.5 h-9 rounded-xl border border-neutral-800/80 backdrop-blur-md">
+                <NotificationBell />
+                <Link
+                  href="/profile"
+                  className="hidden sm:flex items-center space-x-2 bg-neutral-900/60 px-3.5 h-9 rounded-xl border border-neutral-800/80 backdrop-blur-md hover:border-violet-500/30 transition-colors"
+                  title="View profile"
+                >
                   <UserIcon className="w-3.5 h-3.5 text-violet-400" />
                   <span className="text-xs text-neutral-300 font-bold truncate max-w-[120px]">
                     {user.email}
@@ -70,7 +80,7 @@ export const Navbar: React.FC = () => {
                   <span className="text-[9px] bg-violet-500/10 text-violet-300 border border-violet-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider font-extrabold">
                     {user.role}
                   </span>
-                </div>
+                </Link>
                 <button
                   onClick={logout}
                   className="flex items-center space-x-1.5 bg-neutral-900 hover:bg-red-500/10 text-neutral-400 hover:text-red-400 px-4 py-2 rounded-xl border border-neutral-800 hover:border-red-500/20 transition-all duration-200 text-xs font-black cursor-pointer shadow-md active:scale-95"

@@ -1,8 +1,9 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
+import { Role, PenaltyStatus, BorrowStatus } from '@prisma/client';
 
 @Injectable()
 export class UsersService {
@@ -35,6 +36,7 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -53,6 +55,7 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -66,6 +69,7 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -111,6 +115,7 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -127,9 +132,101 @@ export class UsersService {
         id: true,
         email: true,
         role: true,
+        status: true,
         createdAt: true,
         updatedAt: true,
       },
     });
+  }
+
+  async updateStatus(id: string, status: string) {
+    await this.findOne(id);
+    return this.prisma.user.update({
+      where: { id },
+      data: { status },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  async updateRole(id: string, role: Role) {
+    await this.findOne(id);
+    return this.prisma.user.update({
+      where: { id },
+      data: { role },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  }
+
+  /**
+   * Returns the user's profile together with activity counters used by the
+   * profile page (borrow stats, favorites, reading, outstanding fines).
+   */
+  async getProfileWithActivity(id: string) {
+    const user = await this.findOne(id);
+
+    const [totalBorrows, activeBorrows, favorites, reading, unpaidPenalties, totalFineAgg] =
+      await Promise.all([
+        this.prisma.borrowSlip.count({ where: { userId: id } }),
+        this.prisma.borrowSlip.count({
+          where: { userId: id, status: { in: [BorrowStatus.BORROWED, BorrowStatus.OVERDUE] } },
+        }),
+        this.prisma.favorite.count({ where: { userId: id } }),
+        this.prisma.readingProgress.count({ where: { userId: id } }),
+        this.prisma.penaltySlip.count({ where: { userId: id, status: PenaltyStatus.UNPAID } }),
+        this.prisma.penaltySlip.aggregate({
+          where: { userId: id, status: PenaltyStatus.UNPAID },
+          _sum: { fineAmount: true },
+        }),
+      ]);
+
+    return {
+      ...user,
+      activity: {
+        totalBorrows,
+        activeBorrows,
+        favorites,
+        reading,
+        unpaidPenalties,
+        outstandingFine: totalFineAgg._sum.fineAmount || 0,
+      },
+    };
+  }
+
+  async changePassword(id: string, currentPassword: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 4) {
+      throw new BadRequestException('New password must be at least 4 characters long');
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, this.saltRounds);
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+
+    return { success: true, message: 'Password updated successfully' };
   }
 }
